@@ -2,8 +2,8 @@
 
 ## Team
 
-- Member 1: **[name and university ID]** - **[contribution]**
-- Member 2: **[name and university ID]** - **[contribution, or remove this line if working alone]**
+- Member 1: **Amr Khaled AbdElRahim - 2304078** - **Backend**
+- Member 2: **AbdElRahman Ahmed Elsayed- 2304056** - **Frontend**
 
 Replace the placeholders before submitting.
 
