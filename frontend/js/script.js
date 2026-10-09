@@ -1,0 +1,40 @@
+const api = {
+    async request(path, options = {}) {
+        const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) }, credentials: "same-origin" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) { const error = new Error(data.error || "Something went wrong."); error.status = response.status; error.details = data.errors || {}; throw error; }
+        return data;
+    },
+    get(path) { return this.request(path); },
+    send(path, method, body) { return this.request(path, { method, body: JSON.stringify(body) }); }
+};
+
+function showMessage(element, message, type = "error") { if (element) { element.textContent = message || ""; element.className = `form-message ${message ? type : ""}`; } }
+function clearFieldErrors() { document.querySelectorAll(".field-error").forEach((element) => { element.textContent = ""; }); document.querySelectorAll("input").forEach((input) => input.removeAttribute("aria-invalid")); }
+function showFieldErrors(errors) { Object.entries(errors).forEach(([field, message]) => { const errorElement = document.querySelector(`[data-error-for="${field}"]`); const input = document.getElementById(field); if (errorElement) errorElement.textContent = message; if (input) input.setAttribute("aria-invalid", "true"); }); }
+function formValues(form) { return Object.fromEntries(new FormData(form).entries()); }
+function validateAuth(form, fields) { const values = formValues(form); const errors = {}; fields.forEach(([field, message]) => { if (!values[field]) errors[field] = message; }); if (values.confirm_password && values.password !== values.confirm_password) errors.confirm_password = "Passwords do not match"; if (Object.keys(errors).length) { showFieldErrors(errors); showMessage(document.getElementById("message"), Object.values(errors)[0]); return false; } return true; }
+function setBusy(button, busy, busyText) { if (!button) return; if (busy) { button.dataset.originalText = button.textContent; button.textContent = busyText; button.disabled = true; } else { button.textContent = button.dataset.originalText || button.textContent; button.disabled = false; } }
+
+function initLogin() { const form = document.getElementById("loginForm"); if (!form) return; const message = document.getElementById("message"); form.addEventListener("submit", async (event) => { event.preventDefault(); clearFieldErrors(); showMessage(message, ""); if (!validateAuth(form, [["email", "Email is required"], ["password", "Password is required"]])) return; const button = form.querySelector("button[type='submit']"); setBusy(button, true, "Signing in..."); try { await api.send("/api/login", "POST", formValues(form)); window.location.href = "todo-test.html"; } catch (error) { showFieldErrors(error.details); showMessage(message, error.message); } finally { setBusy(button, false); } }); }
+function initRegister() { const form = document.getElementById("registerForm"); if (!form) return; const message = document.getElementById("message"); form.addEventListener("submit", async (event) => { event.preventDefault(); clearFieldErrors(); showMessage(message, ""); if (!validateAuth(form, [["name", "Name is required"], ["email", "Email is required"], ["password", "Password is required"], ["confirm_password", "Confirm password is required"]])) return; const button = form.querySelector("button[type='submit']"); setBusy(button, true, "Creating account..."); try { await api.send("/api/register", "POST", formValues(form)); window.location.href = "todo-test.html"; } catch (error) { showFieldErrors(error.details); showMessage(message, error.message); } finally { setBusy(button, false); } }); }
+
+function todoItem(todo, onChange) {
+    const item = document.createElement("li"); item.className = todo.is_done ? "todo-item is-done" : "todo-item";
+    const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.checked = todo.is_done; checkbox.setAttribute("aria-label", `Mark ${todo.title} as done`); checkbox.addEventListener("change", async () => { checkbox.disabled = true; try { await api.send(`/api/todos/${todo.id}`, "PUT", { is_done: checkbox.checked }); await onChange(); } catch (error) { checkbox.checked = todo.is_done; showMessage(document.getElementById("pageMessage"), error.message); } finally { checkbox.disabled = false; } });
+    const title = document.createElement("input"); title.type = "text"; title.value = todo.title; title.maxLength = 200; title.setAttribute("aria-label", "Task title");
+    const saveButton = document.createElement("button"); saveButton.type = "button"; saveButton.className = "small-button"; saveButton.textContent = "Save"; saveButton.addEventListener("click", async () => { saveButton.disabled = true; try { await api.send(`/api/todos/${todo.id}`, "PUT", { title: title.value }); await onChange(); } catch (error) { showMessage(document.getElementById("pageMessage"), error.message); } finally { saveButton.disabled = false; } });
+    const deleteButton = document.createElement("button"); deleteButton.type = "button"; deleteButton.className = "small-button danger-button"; deleteButton.textContent = "Delete"; deleteButton.addEventListener("click", async () => { if (!window.confirm("Delete this task?")) return; deleteButton.disabled = true; try { await api.request(`/api/todos/${todo.id}`, { method: "DELETE" }); await onChange(); } catch (error) { showMessage(document.getElementById("pageMessage"), error.message); deleteButton.disabled = false; } });
+    item.append(checkbox, title, saveButton, deleteButton); return item;
+}
+
+function initTodos() {
+    const form = document.getElementById("todoForm"); if (!form) return; const list = document.getElementById("todoList"); const emptyState = document.getElementById("emptyState"); const taskCount = document.getElementById("taskCount"); const welcomeMessage = document.getElementById("welcomeMessage"); const todoMessage = document.getElementById("todoMessage"); const pageMessage = document.getElementById("pageMessage"); let todos = [];
+    function render() { list.replaceChildren(...todos.map((todo) => todoItem(todo, loadTodos))); emptyState.hidden = todos.length > 0; taskCount.textContent = `${todos.length} ${todos.length === 1 ? "task" : "tasks"}`; }
+    async function loadTodos() { try { todos = await api.get("/api/todos"); showMessage(pageMessage, ""); render(); } catch (error) { if (error.status === 401) { window.location.href = "login.html"; return; } showMessage(pageMessage, error.message); } }
+    async function loadSession() { try { const data = await api.get("/api/session"); if (!data.loggedIn) { window.location.href = "login.html"; return; } welcomeMessage.textContent = `Hi, ${data.user.name}. Here is your list.`; await loadTodos(); } catch (error) { showMessage(pageMessage, error.message); } }
+    form.addEventListener("submit", async (event) => { event.preventDefault(); showMessage(todoMessage, ""); const titleInput = document.getElementById("title"); const title = titleInput.value.trim(); if (!title) { showMessage(todoMessage, "Title is required"); titleInput.focus(); return; } if (title.length > 200) { showMessage(todoMessage, "Title is too long"); titleInput.focus(); return; } const button = form.querySelector("button[type='submit']"); setBusy(button, true, "Adding..."); try { await api.send("/api/todos", "POST", { title }); titleInput.value = ""; await loadTodos(); } catch (error) { if (error.status === 401) window.location.href = "login.html"; else showMessage(todoMessage, error.message); } finally { setBusy(button, false); } });
+    document.getElementById("logoutButton").addEventListener("click", async () => { await api.send("/api/logout", "POST", {}); window.location.href = "login.html"; }); loadSession();
+}
+
+initLogin(); initRegister(); initTodos();

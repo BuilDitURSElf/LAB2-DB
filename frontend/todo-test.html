@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My To-Do List</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="todo-page">
+    <main class="todo-shell">
+        <header class="todo-header">
+            <div>
+                <div class="eyebrow">Personal workspace</div>
+                <h1>Today, made lighter</h1>
+                <p id="welcomeMessage" class="intro">Loading your tasks...</p>
+            </div>
+            <button id="logoutButton" class="text-button" type="button">Log out</button>
+        </header>
+        <form id="todoForm" class="add-todo-form" action="/api/todos" method="post">
+            <label for="title">Add a task</label>
+            <div class="add-row">
+                <input type="text" id="title" name="title" placeholder="What needs your attention?" maxlength="200">
+                <button class="primary-button" type="submit">Add task</button>
+            </div>
+            <p id="todoMessage" class="form-message" role="alert"></p>
+        </form>
+        <section class="todo-section" aria-labelledby="listHeading">
+            <div class="section-heading"><h2 id="listHeading">Your tasks</h2><span id="taskCount" class="task-count"></span></div>
+            <p id="emptyState" class="empty-state" hidden>No tasks yet. Add one small thing to begin.</p>
+            <ul id="todoList" aria-live="polite"></ul>
+        </section>
+        <p id="pageMessage" class="form-message" role="alert"></p>
+    </main>
+    <script src="js/script.js"></script>
+</body>
+</html>
