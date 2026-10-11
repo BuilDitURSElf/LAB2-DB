@@ -1,7 +1,22 @@
+let csrfToken = "";
+
+async function ensureCsrfToken() {
+  if (csrfToken) return csrfToken;
+  const response = await fetch("/api/csrf-token", { credentials: "same-origin" });
+  const data = await response.json();
+  csrfToken = data.csrfToken || "";
+  return csrfToken;
+}
+
 async function api(url, options = {}) {
+  const token = await ensureCsrfToken();
   const response = await fetch(url, {
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": token,
+      ...(options.headers || {}),
+    },
     ...options,
   });
   const data = await response.json().catch(() => ({}));

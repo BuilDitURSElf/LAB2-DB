@@ -3,6 +3,8 @@ const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const mysql = require("mysql2/promise");
+const crypto = require("crypto");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,16 +21,51 @@ const pool = mysql.createPool({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.set("trust proxy", 1);
+app.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "change-me",
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: "lax" },
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
   })
 );
 
 app.use(express.static(path.join(__dirname)));
+
+function ensureCsrf(req) {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(24).toString("hex");
+  }
+  return req.session.csrfToken;
+}
+
+function csrfProtection(req, res, next) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    ensureCsrf(req);
+    return next();
+  }
+  const sentToken = req.get("x-csrf-token");
+  const currentToken = ensureCsrf(req);
+  if (!sentToken || sentToken !== currentToken) {
+    return res.status(403).json({ message: "Invalid CSRF token." });
+  }
+  return next();
+}
+
+app.use(csrfProtection);
 
 function requireAuth(req, res, next) {
   if (!req.session.user) {
@@ -66,6 +103,10 @@ app.post("/api/register", async (req, res) => {
     }
     return res.status(500).json({ message: "Server error." });
   }
+});
+
+app.get("/api/csrf-token", (req, res) => {
+  return res.json({ csrfToken: ensureCsrf(req) });
 });
 
 app.post("/api/login", async (req, res) => {
